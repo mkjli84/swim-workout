@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대화형 수영 인터벌 훈련 + TTS 코치</title>
+    <!-- 
+        [최종 CSP 수정]
+        가장 흔한 CSP 실패 지점인 'connect-src'를 최대한 개방적으로 설정하고,
+        'script-src'에 'unsafe-eval'을 추가하여 호스팅 환경의 제약을 완화합니다.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self'; 
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com;
+        style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
+        connect-src 'self' https://generativelanguage.googleapis.com https://www.googleapis.com;
+        font-src 'self' data:; 
+        img-src 'self' data:;  
+        media-src 'self' data: blob:;
+    ">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Aqua & Ash (bg-slate-50, bg-white, text-slate-700, accent-blue-600) -->
+    <style>
+        body {
+            font-family: 'Inter', 'Pretendard', sans-serif;
+        }
+        .tab-active {
+            border-bottom-color: #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        .task-list-item input:checked + label {
+            text-decoration: line-through;
+            color: #6b7280;
+        }
+        /* Mobile optimization for visibility */
+        @media (min-width: 640px) {
+            .task-list-item input:checked + label .task-distance {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-full flex items-start justify-center py-4 px-2 min-h-screen">
+    <main class="w-full max-w-xl bg-white shadow-xl rounded-2xl overflow-hidden my-4">
+        
+        <!-- Header -->
+        <header class="p-4 md:p-6 border-b border-slate-200">
+            <h1 class="text-xl md:text-2xl font-bold text-blue-700">🏊 지구력 향상 인터벌 훈련 (25Y)</h1>
+            <p class="text-sm md:text-base text-slate-600 mt-1">심폐 지구력 강화 및 젖산 역치 유지를 위한 스마트 가이드</p>
+            
+            <div class="flex flex-wrap gap-3 mt-3 text-xs md:text-sm">
+                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium">🎯 총 거리: 2,700 Y</span>
+                <span class="bg-slate-100 text-slate-800 px-3 py-1 rounded-full font-medium">⏱️ 예상 시간: 60-75분</span>
+            </div>
+        </header>
+
+        <!-- Progress Bar (Reduced bottom padding) -->
+        <section class="px-4 pt-4 pb-2 md:px-6 md:pt-6 md:pb-3">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-medium text-slate-700">훈련 진행률</span>
+                <span id="progress-text" class="text-sm font-bold text-blue-600">0 / 2700 Y</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+        </section>
+
+        <!-- Main Content Area (Refactored for persistent tabs) -->
+        <div class="px-4 pt-2 pb-8 md:px-8 md:pt-4 md:pb-8">
+            
+            <!-- 1. Tab Navigation -->
+            <nav class="flex border-b border-slate-200 mb-4 md:mb-6">
+                <button id="tab-warmup" data-tab="warmup" class="tab-button py-2 md:py-3 px-2 md:px-3 text-sm text-slate-500 hover:text-blue-600 transition border-b-2 border-transparent tab-active">워밍업</button>
+                <button id="tab-main" data-tab="main" class="tab-button py-2 md:py-3 px-2 md:px-3 text-sm text-slate-500 hover:text-blue-600 transition border-b-2 border-transparent">메인 세트</button>
+                <button id="tab-cool" data-tab="cool" class="tab-button py-2 md:py-3 px-2 md:px-3 text-sm text-slate-500 hover:text-blue-600 transition border-b-2 border-transparent">쿨 다운</button>
+            </nav>
+
+            <!-- Tab Content Containers - All contents will be dynamically inserted here and managed by show/hide class -->
+            <div id="tab-containers" class="mb-6 md:mb-8">
+                <!-- Content will be injected here on first access -->
+            </div>
+
+            <!-- 2. Stopwatch Feature (Second) -->
+            <div class="mb-6 md:mb-8 p-4 bg-slate-100 rounded-xl shadow-inner border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    스톱워치 (Stopwatch)
+                </h2>
+                <div id="stopwatch-display" class="text-5xl font-mono font-extrabold text-slate-800 text-center mb-4">00:00.00</div>
+                <div class="flex justify-center space-x-4 mb-4">
+                    <button id="startStopBtn" class="flex-1 px-4 py-3 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 bg-green-600 hover:bg-green-700">시작 (Start)</button>
+                    <button id="lapResetBtn" class="flex-1 px-4 py-3 text-slate-700 font-bold rounded-xl shadow-lg transition transform active:scale-95 bg-slate-300 hover:bg-slate-400">랩 (Lap)</button>
+                </div>
+                <div id="laps-container" class="mt-4 max-h-40 overflow-y-auto space-y-2">
+                    <p class="text-sm text-center text-slate-500" id="no-laps-text">랩 기록이 없습니다.</p>
+                </div>
+            </div>
+
+            <!-- 3. Interval Calculator (Third) -->
+            <div class="bg-white p-4 rounded-xl shadow-md border border-blue-200 mb-6 md:mb-8">
+                <h3 class="text-lg font-bold text-slate-700 mb-3 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13.5a3.5 3.5 0 11-3.5-3.5H9z"></path></svg>
+                    인터벌 시간 계산기
+                </h3>
+                <p class="text-xs text-slate-500 mb-3">본인의 현재 100Y 자유형 기록을 입력하세요. (예: 1분 10초 → 01:10)</p>
+                <div class="flex items-center space-x-2 mb-4">
+                    <input type="number" id="paceMinute" placeholder="분 (MM)" min="0" max="99" class="w-1/3 p-2 border border-slate-300 rounded-lg text-center text-sm" value="01">
+                    <span class="text-lg font-bold">:</span>
+                    <input type="number" id="paceSecond" placeholder="초 (SS)" min="0" max="59" class="w-1/3 p-2 border border-slate-300 rounded-lg text-center text-sm" value="10">
+                    <button id="calculateBtn" class="w-1/3 bg-blue-600 text-white p-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">계산</button>
+                </div>
+                
+                <div id="calculationResult" class="text-sm p-3 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                    <p class="font-semibold text-blue-700 mb-1">추천 인터벌 (10-15초 휴식 기준)</p>
+                    <p>100Y 인터벌: <span id="rec100Y" class="font-bold text-base"></span></p>
+                    <p>200Y 인터벌: <span id="rec200Y" class="font-bold text-base"></span></p>
+                </div>
+            </div>
+            
+            <!-- 4. Gemini AI Swim Coach Feature (UPDATED FOR ENGLISH TIP + TTS) -->
+            <div class="bg-blue-50 p-4 rounded-xl shadow-md border border-blue-300 mb-6 md:mb-8">
+                <h3 class="text-lg font-bold text-blue-700 mb-3 flex items-center">
+                    <span class="text-xl mr-2">✨</span> AI 수영 코치
+                </h3>
+                
+                <!-- Feature 1: Dynamic Tip/Motivation -->
+                <p class="text-sm text-slate-600 mb-2">훈련 단계별 영어 팁 & 음성 출력</p>
+                <div class="flex space-x-2 mb-4">
+                    <button id="aiTipBtn" class="flex-1 bg-blue-600 text-white p-3 rounded-lg text-sm font-semibold hover:bg-blue-700 transition active:scale-95">
+                        ✨ 영어 팁 생성 (Get Tip)
+                    </button>
+                    <!-- NEW TTS BUTTON -->
+                    <button id="aiSpeakBtn" class="w-1/4 bg-green-500 text-white p-3 rounded-lg text-sm font-semibold hover:bg-green-600 transition active:scale-95 disabled:opacity-50" disabled>
+                        🔊 듣기
+                    </button>
+                </div>
+                
+                <div id="aiOutput" class="p-3 bg-white rounded-lg border border-slate-200 text-sm text-slate-700 min-h-[50px] mb-4">
+                    <!-- Updated default text to English -->
+                    <p id="aiTipText">Press the button to get a motivating tip for your warmup!</p>
+                </div>
+                <!-- TTS Loading Indicator -->
+                <div id="ttsLoading" class="mt-1 text-center text-xs text-green-600 hidden">
+                    <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-green-500 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    음성 생성 중 (Generating Audio)...
+                </div>
+
+                <!-- Feature 2: Q&A (Kept in Korean) -->
+                <div class="mt-4 border-t border-slate-200 pt-4">
+                    <h4 class="font-semibold text-slate-700 mb-2">🏊 훈련 Q&A (궁금한 점 질문하기)</h4>
+                    <div class="flex space-x-2">
+                        <input type="text" id="aiQuery" placeholder="수영 테크닉이나 컨디셔닝에 대해 질문하세요..." class="flex-1 p-2 border border-slate-300 rounded-lg text-sm">
+                        <button id="aiAskBtn" class="bg-purple-600 text-white p-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition active:scale-95">질문</button>
+                    </div>
+                    <!-- Loading Indicator -->
+                    <div id="aiLoading" class="mt-3 text-center text-sm text-slate-500 hidden">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-purple-500 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        답변 생성 중...
+                    </div>
+                    <!-- Answer Display -->
+                    <div id="aiAnswer" class="mt-3 p-3 bg-white rounded-lg border border-slate-200 text-sm text-slate-700 min-h-[50px] hidden">
+                        <p id="aiAnswerText" class="text-slate-700">답변을 기다리는 중...</p>
+                        <div id="aiSources" class="mt-3 pt-2 border-t border-slate-100 text-xs text-slate-500"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Key Points Alert -->
+            <div class="mt-6 p-3 md:p-4 bg-yellow-50 rounded-lg text-xs md:text-sm text-yellow-800">
+                <p class="font-semibold mb-1">💡 주요 포인트:</p>
+                <p>25야드 풀은 턴이 잦습니다. 턴 동작을 강력하고 효율적으로 가져가야 지구력 훈련의 효과가 극대화됩니다. 메인 세트에서 정해진 간격 내에 도착하는 것에 집중하세요.</p>
+            </div>
+            
+        </div>
+    </main>
+
+    <script>
+        const TOTAL_DISTANCE = 2700;
+        let completedDistance = 0;
+        let currentTabKey = 'warmup'; // Keep track of the currently active tab
+        const API_KEY = ""; // Gemini API Key
+        const MODEL = 'gemini-2.5-flash-preview-09-2025';
+        
+        // NEW: Stores the latest generated tip text for TTS
+        let latestTipText = ""; 
+
+        // --- Stopwatch Variables ---
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval;
+        let isRunning = false;
+        let lapCounter = 0;
+        let lastLapTime = 0;
+        // ---------------------------
+
+        const WORKOUT_DATA = {
+            warmup: [
+                { id: 'wu1', content: '자유형', distance: 400, effort: '부드럽게, 편안한 호흡 유지', rest: '-' },
+                { id: 'wu2', content: '드릴/킥 (4 x 50Y)', distance: 200, effort: '25Y 킥 + 25Y 드릴, 짧은 발차기로 진행', rest: '15초' },
+                { id: 'wu3', content: '본 영법 (2 x 50Y)', distance: 100, effort: '접영 또는 배영, 70% 노력으로 영법 감각 익히기', rest: '10초' }
+            ],
+            main: [
+                { id: 'main1', content: '중거리 인터벌', baseDistance: 100, reps: 8, effort: '자유형 (Threshold Pace, 80-85% 노력)', rest: '1:25 간격 유지 (휴식 15초)', note: '턴 후 돌핀킥에 집중하세요.' },
+                { id: 'main2', content: '쉬운 회복 (100Y)', distance: 100, effort: '자유형 (아주 천천히 회복하며 영법 풀기)', rest: '-' },
+                { id: 'main3', content: '장거리 인터벌', baseDistance: 200, reps: 4, effort: '자유형 (Threshold Pace, 80% 노력)', rest: '2:45 간격 유지 (휴식 00:25)', note: '일정한 페이스와 리듬 유지가 중요합니다.' }
+            ],
+            cool: [
+                { id: 'cd1', content: '회복 수영 (300Y)', distance: 300, effort: '느리고 부드러운 자유형 및 배영', rest: '-' },
+                { id: 'cd2', content: '스트레칭', distance: 0, effort: '수영 후 어깨, 등, 다리 스트레칭 5분', rest: '-' }
+            ]
+        };
+        
+        const WORKOUT_CONTEXT = {
+            warmup: {
+                title: '워밍업', 
+                description: '몸을 부드럽게 풀고 심박수를 천천히 올리는 단계입니다. (총 700Y)',
+                // Updated prompt to request English tip, max 2 sentences
+                prompt: 'Provide a concise, highly motivating tip or advice for muscle activation and injury prevention during the swimming warm-up phase. The response must be in English and no more than two sentences long. Use an energetic and positive tone.'
+            },
+            main: {
+                title: '메인 세트', 
+                description: '지구력과 페이스 유지를 집중적으로 훈련하며, 임계점을 넘나드는 단계입니다. (총 1,700Y)',
+                // Updated prompt to request English tip, max 2 sentences
+                prompt: 'Provide a specific, professional tip for maintaining pace, improving turn efficiency, or managing mental fortitude during the main interval set of a swim workout. The response must be in English and no more than two sentences long. Use a challenging and focused tone.'
+            },
+            cool: {
+                title: '쿨 다운', 
+                description: '심박수를 낮추고 근육의 긴장을 풀어 회복을 돕는 단계입니다. (총 300Y)',
+                // Updated prompt to request English tip, max 2 sentences
+                prompt: 'Provide a gentle reminder emphasizing the importance of muscle relaxation and recovery after a swim workout, mentioning soft stretching or hydration. The response must be in English and no more than two sentences long. Use a calm and encouraging tone.'
+            }
+        };
+
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.round(seconds % 60);
+            return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+        }
+
+        // --- Base64 and Audio Utility Functions (NEW) ---
+
+        /**
+         * Base64 string을 ArrayBuffer로 변환합니다. (TTS용)
+         */
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        /**
+         * DataView에 문자열을 씁니다. (WAV 헤더 생성용)
+         */
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        /**
+         * PCM (Signed 16-bit) 데이터를 WAV 파일 형식의 Blob으로 변환합니다. (TTS용)
+         * @param {Int16Array} pcm16 - Signed 16-bit PCM data.
+         * @param {number} sampleRate - Sample rate (e.g., 24000).
+         * @returns {Blob} WAV file Blob.
+         */
+        function pcmToWav(pcm16, sampleRate) {
+            const buffer = new ArrayBuffer(44 + pcm16.length * 2);
+            const view = new DataView(buffer);
+            
+            // RIFF identifier 'RIFF'
+            writeString(view, 0, 'RIFF');
+            // file length
+            view.setUint32(4, 36 + pcm16.length * 2, true);
+            // RIFF type 'WAVE'
+            writeString(view, 8, 'WAVE');
+            // format chunk identifier 'fmt '
+            writeString(view, 12, 'fmt ');
+            // format chunk length
+            view.setUint32(16, 16, true);
+            // sample format (1 - PCM)
+            view.setUint16(20, 1, true);
+            // number of channels
+            view.setUint16(22, 1, true);
+            // sample rate
+            view.setUint32(24, sampleRate, true);
+            // byte rate (SampleRate * Channels * BitsPerSample/8)
+            view.setUint32(28, sampleRate * 2, true);
+            // block align (Channels * BitsPerSample/8)
+            view.setUint16(32, 2, true);
+            // bits per sample
+            view.setUint16(34, 16, true);
+            // data chunk identifier 'data'
+            writeString(view, 36, 'data');
+            // data chunk length
+            view.setUint32(40, pcm16.length * 2, true);
+
+            // Write PCM data
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16[i], true);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+        
+        /**
+         * AI 팁을 음성으로 출력합니다. (NEW)
+         */
+        async function speakAITip(text) {
+            if (!text || document.getElementById('aiSpeakBtn').disabled) return;
+            
+            const aiSpeakBtn = document.getElementById('aiSpeakBtn');
+            const ttsLoading = document.getElementById('ttsLoading');
+            
+            // UI 상태 변경
+            aiSpeakBtn.disabled = true;
+            aiSpeakBtn.textContent = '🔊 생성 중...';
+            ttsLoading.classList.remove('hidden');
+
+            const TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+            const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${API_KEY}`;
+            
+            // Note: The TTS API call expects the prompt to be the text to be spoken.
+            const payload = {
+                contents: [{ parts: [{ text: text }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Puck" } // Upbeat English voice
+                        }
+                    }
+                },
+            };
+
+            try {
+                const result = await exponentialBackoffFetch(TTS_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType; // Expected: audio/L16;rate=24000
+
+                if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                    const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+                    
+                    const pcmDataBuffer = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmDataBuffer);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    
+                    // Blob URL 생성 (media-src 'blob:' 이 CSP에 있어야 함)
+                    const audioUrl = URL.createObjectURL(wavBlob); 
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl); // Clean up the URL after playback
+                    };
+
+                } else {
+                    console.error("TTS Response Error: No valid audio data received.", part);
+                    throw new Error("Invalid audio response format. Check console for details.");
+                }
+
+            } catch (error) {
+                console.error("TTS API Error:", error);
+                document.getElementById('aiTipText').innerHTML += `<br><span class="text-red-500 text-xs"> (TTS Error: ${error.message})</span>`;
+            } finally {
+                // UI 상태 복원
+                aiSpeakBtn.disabled = false;
+                aiSpeakBtn.textContent = '🔊 듣기';
+                ttsLoading.classList.add('hidden');
+            }
+        }
+
+        // --- API & LLM Functions ---
+
+        /**
+         * Exponential backoff을 사용하여 API 요청을 수행합니다.
+         */
+        async function exponentialBackoffFetch(url, options, maxRetries = 3) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429) {
+                        if (i === maxRetries - 1) throw new Error("API rate limit exceeded after all retries.");
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    if (!response.ok) {
+                         // Attempt to read body for more specific error message
+                        let errorText = await response.text();
+                        if (errorText.length > 500) errorText = errorText.substring(0, 500) + "..."; // Truncate long error messages
+                        throw new Error(`API returned status ${response.status}: ${errorText}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * 현재 탭 컨텍스트에 맞는 AI 팁을 생성합니다. (MODIFIED)
+         */
+        async function getAITip() {
+            const context = WORKOUT_CONTEXT[currentTabKey];
+            const aiTipTextElement = document.getElementById('aiTipText');
+            const aiTipBtn = document.getElementById('aiTipBtn');
+            const aiSpeakBtn = document.getElementById('aiSpeakBtn');
+            
+            aiSpeakBtn.disabled = true; // Disable speaker button until text is ready
+            latestTipText = ""; // Clear previous text
+
+            aiTipTextElement.innerHTML = `<span class="text-slate-500">AI Coach is thinking...</span>`;
+            aiTipBtn.disabled = true;
+            aiTipBtn.textContent = '✨ Generating Tip...';
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+            // System prompt now explicitly guides English output
+            const systemPrompt = "You are a world-class swimming coach. You provide clear and concise advice. All responses for this prompt MUST be in ENGLISH and no more than two sentences long."; 
+            
+            const payload = {
+                contents: [{ parts: [{ text: context.prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            try {
+                const result = await exponentialBackoffFetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, failed to generate a tip.";
+                
+                // Store the text for TTS. Remove markdown formatting.
+                latestTipText = text.replace(/\*/g, '').trim(); 
+                
+                // Display the text
+                aiTipTextElement.innerHTML = `<p>${text.replace(/\n/g, '<br>')}</p>`;
+
+            } catch (error) {
+                console.error("AI Tip Generation Error:", error);
+                aiTipTextElement.innerHTML = `<span class="text-red-500">⚠️ AI Coach Connection Error: ${error.message}. Please check your network or CSP settings.</span>`;
+                latestTipText = "";
+            } finally {
+                aiTipBtn.disabled = false;
+                aiTipBtn.textContent = '✨ 영어 팁 생성 (Get Tip)';
+                if (latestTipText) {
+                    aiSpeakBtn.disabled = false;
+                }
+            }
+        }
+
+        /**
+         * 사용자 질문에 대해 구글 검색 기반의 답변을 생성합니다. (KEPT IN KOREAN)
+         */
+        async function askAICoach() {
+            const queryInput = document.getElementById('aiQuery');
+            const query = queryInput.value.trim();
+            const aiAskBtn = document.getElementById('aiAskBtn');
+            const aiAnswerDiv = document.getElementById('aiAnswer');
+            const aiAnswerText = document.getElementById('aiAnswerText');
+            const aiSourcesDiv = document.getElementById('aiSources');
+            const aiLoading = document.getElementById('aiLoading');
+
+            if (!query) return;
+
+            aiAnswerDiv.classList.add('hidden');
+            aiLoading.classList.remove('hidden');
+            aiAskBtn.disabled = true;
+            aiQuery.disabled = true;
+            aiSourcesDiv.innerHTML = '';
+            
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+            
+            // System prompt keeps Q&A in Korean
+            const systemPrompt = "당신은 경험이 풍부하고 지식이 풍부한 수영 코치입니다. 사용자 질문에 대해 웹 검색을 통해 얻은 정보를 바탕으로 정확하고 이해하기 쉽게 한국어로 답변합니다. 답변은 약 3~5줄 정도로 간결하게 요약해 주세요. 절대 영어로 답변하지 마세요.";
+
+            const payload = {
+                contents: [{ parts: [{ text: `사용자의 질문: ${query}` }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+
+            try {
+                const result = await exponentialBackoffFetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const candidate = result?.candidates?.[0];
+                const text = candidate?.content?.parts?.[0]?.text || "죄송합니다. 질문에 답변하는 데 실패했습니다.";
+                
+                let sources = [];
+                const groundingMetadata = candidate?.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri,
+                            title: attribution.web?.title,
+                        }))
+                        .filter(source => source.uri && source.title);
+                }
+
+                aiAnswerText.textContent = text;
+                
+                if (sources.length > 0) {
+                    aiSourcesDiv.innerHTML = '<p class="font-semibold mb-1">출처:</p>' + sources.map((s, index) => 
+                        `<a href="${s.uri}" target="_blank" class="block text-blue-500 hover:text-blue-700 truncate">${index + 1}. ${s.title}</a>`
+                    ).join('');
+                } else {
+                    aiSourcesDiv.innerHTML = '출처를 찾을 수 없습니다.';
+                }
+
+            } catch (error) {
+                console.error("AI Coach Q&A Error:", error);
+                aiAnswerText.textContent = `⚠️ AI 코치 연결 오류: ${error.message}.`;
+                aiSourcesDiv.innerHTML = '';
+            } finally {
+                aiLoading.classList.add('hidden');
+                aiAnswerDiv.classList.remove('hidden');
+                aiAskBtn.disabled = false;
+                aiQuery.disabled = false;
+            }
+        }
+
+        // --- Progress and State Functions ---
+
+        function updateProgress() {
+            completedDistance = 0;
+            // DOM 전체에서 체크된 모든 체크박스를 쿼리
+            const checkboxes = document.querySelectorAll('.task-checkbox:checked');
+            checkboxes.forEach(checkbox => {
+                completedDistance += parseInt(checkbox.dataset.distance) || 0;
+            });
+
+            const percentage = (completedDistance / TOTAL_DISTANCE) * 100;
+            document.getElementById('progress-bar').style.width = `${Math.min(100, percentage)}%`;
+            document.getElementById('progress-text').textContent = `${completedDistance} / ${TOTAL_DISTANCE} Y`;
+
+            if (completedDistance === TOTAL_DISTANCE) {
+                document.getElementById('progress-text').textContent += ' (훈련 완료!)';
+            }
+        }
+        
+        function saveState() {
+            const state = {};
+            // DOM 전체에서 모든 체크박스 상태를 저장
+            document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                state[checkbox.id] = checkbox.checked;
+            });
+            localStorage.setItem('workoutState', JSON.stringify(state));
+        }
+
+        // --- Stopwatch Functions (Unchanged) ---
+        function displayStopwatchTime(time) {
+            const milliseconds = Math.floor((time % 1000) / 10);
+            const seconds = Math.floor((time / 1000) % 60);
+            const minutes = Math.floor((time / (1000 * 60)) % 60);
+
+            return (
+                String(minutes).padStart(2, '0') + ':' +
+                String(seconds).padStart(2, '0') + '.' +
+                String(milliseconds).padStart(2, '0').slice(0, 2)
+            );
+        }
+
+        function startStopwatch() {
+            if (!isRunning) {
+                startTime = Date.now() - elapsedTime;
+                timerInterval = setInterval(updateTime, 10);
+                isRunning = true;
+                document.getElementById('startStopBtn').textContent = '일시정지 (Pause)';
+                document.getElementById('startStopBtn').classList.remove('bg-green-600', 'hover:bg-green-700');
+                document.getElementById('startStopBtn').classList.add('bg-red-600', 'hover:bg-red-700');
+                document.getElementById('lapResetBtn').textContent = '랩 (Lap)';
+                document.getElementById('lapResetBtn').classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-white');
+                document.getElementById('lapResetBtn').classList.add('bg-slate-300', 'hover:bg-slate-400', 'text-slate-700');
+            } else {
+                clearInterval(timerInterval);
+                isRunning = false;
+                document.getElementById('startStopBtn').textContent = '재개 (Resume)';
+                document.getElementById('startStopBtn').classList.remove('bg-red-600', 'hover:bg-red-700');
+                document.getElementById('startStopBtn').classList.add('bg-green-600', 'hover:bg-green-700');
+                document.getElementById('lapResetBtn').textContent = '리셋 (Reset)';
+                document.getElementById('lapResetBtn').classList.remove('bg-slate-300', 'hover:bg-slate-400', 'text-slate-700');
+                document.getElementById('lapResetBtn').classList.add('bg-yellow-500', 'hover:bg-yellow-600', 'text-white');
+            }
+        }
+
+        function updateTime() {
+            elapsedTime = Date.now() - startTime;
+            document.getElementById('stopwatch-display').textContent = displayStopwatchTime(elapsedTime);
+        }
+
+        function recordLap() {
+            if (isRunning) {
+                lapCounter++;
+                const currentLapTime = elapsedTime - lastLapTime;
+                lastLapTime = elapsedTime;
+
+                const lapContainer = document.getElementById('laps-container');
+                const lapDiv = document.createElement('div');
+                lapDiv.className = 'flex justify-between items-center p-2 bg-white rounded-lg shadow-sm text-sm font-medium';
+                lapDiv.innerHTML = `
+                    <span class="text-blue-600 font-bold">랩 ${lapCounter}</span>
+                    <span class="font-mono text-slate-800">${displayStopwatchTime(currentLapTime)}</span>
+                    <span class="font-mono text-slate-500 w-1/4 text-right hidden sm:inline">총: ${displayStopwatchTime(elapsedTime)}</span>
+                `;
+                lapContainer.prepend(lapDiv);
+                document.getElementById('no-laps-text').classList.add('hidden');
+            } else {
+                // Reset logic when paused
+                resetStopwatch();
+            }
+        }
+
+        function resetStopwatch() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            elapsedTime = 0;
+            startTime = 0;
+            lapCounter = 0;
+            lastLapTime = 0;
+
+            document.getElementById('stopwatch-display').textContent = '00:00.00';
+            document.getElementById('startStopBtn').textContent = '시작 (Start)';
+            document.getElementById('startStopBtn').classList.remove('bg-red-600', 'hover:bg-red-700');
+            document.getElementById('startStopBtn').classList.add('bg-green-600', 'hover:bg-green-700');
+            
+            document.getElementById('lapResetBtn').textContent = '랩 (Lap)';
+            document.getElementById('lapResetBtn').classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'text-white');
+            document.getElementById('lapResetBtn').classList.add('bg-slate-300', 'hover:bg-slate-400', 'text-slate-700');
+
+            document.getElementById('laps-container').innerHTML = '<p class="text-sm text-center text-slate-500" id="no-laps-text">랩 기록이 없습니다.</p>';
+        }
+
+
+        // --- Interval Calculator Functions ---
+        function calculateIntervals() {
+            const minInput = document.getElementById('paceMinute').value;
+            const secInput = document.getElementById('paceSecond').value;
+            
+            const minutes = parseInt(minInput) || 0;
+            const seconds = parseInt(secInput) || 0;
+
+            const paceSeconds = (minutes * 60) + seconds;
+
+            if (paceSeconds < 30 || paceSeconds > 180) {
+                document.getElementById('rec100Y').textContent = '유효한 100Y 기록을 입력하세요.';
+                document.getElementById('rec200Y').textContent = '-';
+                document.getElementById('calculationResult').classList.remove('hidden');
+
+                // Invalid input: revert to default/placeholder display text
+                WORKOUT_DATA.main[0].rest = '1:25 간격 유지 (휴식 15초)';
+                WORKOUT_DATA.main[2].rest = '2:45 간격 유지 (휴식 00:25)';
+                
+                // Re-render main set if active to reflect default values
+                if (document.getElementById('tab-content-main')) {
+                    generateAndAttachTabContent('main', true);
+                }
+                return;
+            }
+
+            // 100Y Interval: Pace + 15 seconds (for ~15s rest)
+            const rec100YTime = paceSeconds + 15;
+            
+            // 200Y Interval: 2 * Pace + 35 seconds (for ~35s rest)
+            const rec200YTime = (paceSeconds * 2) + 35; 
+            
+            const formatted100Y = formatTime(rec100YTime);
+            const formatted200Y = formatTime(rec200YTime);
+
+            // Calculate exact rest times in seconds
+            const rest100YSeconds = rec100YTime - paceSeconds;
+            const rest200YSeconds = rec200YTime - (paceSeconds * 2);
+
+            // 1. Update Interval Calculator UI
+            document.getElementById('rec100Y').textContent = formatted100Y;
+            document.getElementById('rec200Y').textContent = formatted200Y;
+            document.getElementById('calculationResult').classList.remove('hidden');
+
+            // 2. Update WORKOUT_DATA for Main Set (Dynamic Content)
+            WORKOUT_DATA.main[0].rest = `${formatted100Y} 간격 유지 (휴식 ${rest100YSeconds}초)`;
+            WORKOUT_DATA.main[2].rest = `${formatted200Y} 간격 유지 (휴식 ${formatTime(rest200YSeconds)})`;
+
+            // 3. Conditional Re-render (if Main Set tab is currently active or has been rendered once)
+            if (document.getElementById('tab-content-main')) {
+                generateAndAttachTabContent('main', true); // Force re-render with new calculated values
+            }
+        }
+
+
+        // --- Workout Checklist Functions (Refactored for persistent content) ---
+        
+        function generateRepetitionItems(item, setKey) {
+            let repHtml = '';
+            const noteHtml = item.note ? `<p class="text-xs text-yellow-600 mt-1 font-medium">⚠️ ${item.note}</p>` : '';
+
+            for (let i = 1; i <= item.reps; i++) {
+                const repDistance = item.baseDistance;
+                const repId = `${item.id}-rep-${i}`;
+                const isLastRep = i === item.reps;
+                
+                repHtml += `
+                    <div class="task-list-item flex items-start p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition border-l-4 ${isLastRep ? 'border-blue-600' : 'border-blue-300'}">
+                        <!-- onclick handler removed; using delegated event listener -->
+                        <input type="checkbox" id="task-${repId}" data-distance="${repDistance}" class="task-checkbox w-5 h-5 mt-1 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                        <label for="task-${repId}" class="ml-4 flex-1 text-slate-700">
+                            <span class="font-semibold text-base">${item.baseDistance}Y 인터벌 (${i}/${item.reps})</span>
+                            <span class="task-distance text-sm ml-2 text-blue-600 font-medium">(${repDistance}Y)</span>
+                            <p class="text-xs text-slate-500 mt-1">노력: ${item.effort}</p>
+                            ${item.rest && item.rest !== '-' ? `<p class="text-xs text-slate-500">간격: ${item.rest}</p>` : ''}
+                            ${noteHtml}
+                        </label>
+                    </div>
+                `;
+            }
+            return repHtml;
+        }
+
+        function renderSimpleItem(item) {
+            return `
+                <div class="task-list-item flex items-start p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
+                    <!-- onclick handler removed; using delegated event listener -->
+                    <input type="checkbox" id="task-${item.id}" data-distance="${item.distance}" class="task-checkbox w-5 h-5 mt-1 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="task-${item.id}" class="ml-4 flex-1 text-slate-700">
+                        <span class="font-semibold text-base">${item.content}</span>
+                        <span class="task-distance text-sm ml-2 text-blue-600 font-medium ${item.distance === 0 ? 'hidden' : ''}">(${item.distance}Y)</span>
+                        <p class="text-xs text-slate-500 mt-1">노력: ${item.effort}</p>
+                        ${item.rest && item.rest !== '-' ? `<p class="text-xs text-slate-500">간격: ${item.rest}</p>` : ''}
+                        ${item.note ? `<p class="text-xs text-yellow-600 mt-1 font-medium">⚠️ ${item.note}</p>` : ''}
+                    </label>
+                </div>
+            `;
+        }
+
+
+        /**
+         * 탭 콘텐츠를 생성하거나 (최초 실행 시) 재생성하고 DOM에 연결합니다.
+         * @param {string} setKey - 'warmup', 'main', 'cool' 중 하나.
+         * @param {boolean} [forceRender=false] - 이미 렌더링된 콘텐츠도 강제로 재생성할지 여부 (예: 계산기 값 변경 시).
+         */
+        function generateAndAttachTabContent(setKey, forceRender = false) {
+            let container = document.getElementById(`tab-content-${setKey}`);
+            const mainContainer = document.getElementById('tab-containers');
+            const data = WORKOUT_DATA[setKey];
+            const context = WORKOUT_CONTEXT[setKey];
+            
+            if (!container) {
+                // 최초 렌더링인 경우
+                container = document.createElement('div');
+                container.id = `tab-content-${setKey}`;
+                container.className = 'tab-content-container'; // Hidden class will be added/removed by switchTabContent
+                mainContainer.appendChild(container);
+            } else if (!forceRender) {
+                // 이미 렌더링되었고 강제 렌더링 요청이 아니면 중단
+                return;
+            } 
+            
+            // HTML 콘텐츠 생성
+            let html = `
+                <p class="text-sm text-slate-500 mb-6">${context.description}</p>
+                <div class="space-y-4">
+            `;
+            
+            data.forEach(item => {
+                if (item.reps) {
+                    html += generateRepetitionItems(item, setKey);
+                } else {
+                    html += renderSimpleItem(item);
+                }
+            });
+
+            if (setKey === 'main') { 
+                 html += `
+                    <div class="mt-8 p-4 bg-purple-50 rounded-lg text-sm text-purple-800">
+                        <h4 class="font-semibold mb-1">다음 단계 제안 (난이도 높이기):</h4>
+                        <ul class="list-disc list-inside space-y-1 ml-2 text-xs">
+                            <li>**간격 줄이기:** 계산된 200Y 간격을 5-10초씩 줄여 휴식 시간을 단축해 보세요.</li>
+                            <li>**반복 횟수 늘리기:** 4 x 200Y 세트를 5 x 200Y로 늘려 총 거리를 증가해 보세요.</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            
+            // DOM 업데이트
+            container.innerHTML = html;
+            
+            // 상태 복원 (이 시점에서 DOM에 요소가 완전히 삽입됨)
+            const storedState = JSON.parse(localStorage.getItem('workoutState') || '{}');
+            container.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                checkbox.checked = storedState[checkbox.id] || false;
+            });
+        }
+
+        function switchTabContent(setKey) {
+            currentTabKey = setKey; // Update current tab state
+            
+            // 1. 선택된 탭의 콘텐츠를 생성하거나 업데이트합니다.
+            generateAndAttachTabContent(setKey); 
+            
+            // 2. 모든 탭 컨테이너를 숨깁니다.
+            document.querySelectorAll('.tab-content-container').forEach(c => c.classList.add('hidden'));
+            
+            // 3. 선택된 탭의 컨테이너를 표시합니다.
+            document.getElementById(`tab-content-${setKey}`).classList.remove('hidden');
+
+            // 4. 진행률을 업데이트합니다. (숨겨진 체크박스까지 모두 계산)
+            updateProgress();
+
+            // 5. AI Tip Button Text 업데이트 (for context)
+            const aiTipTextElement = document.getElementById('aiTipText');
+            // Update default text to match the new English-only setup for tips
+            aiTipTextElement.innerHTML = `Press the button to get a motivating tip for your ${setKey} phase!`;
+            
+            // 6. Disable Speak button
+            document.getElementById('aiSpeakBtn').disabled = true;
+            latestTipText = "";
+        }
+
+        function handleTabClick(event) {
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('tab-active', 'text-blue-600', 'border-blue-600');
+                btn.classList.add('text-slate-500', 'border-transparent');
+            });
+            event.target.classList.add('tab-active', 'text-blue-600', 'border-blue-600');
+            event.target.classList.remove('text-slate-500', 'border-transparent');
+            
+            const tabKey = event.target.dataset.tab;
+            switchTabContent(tabKey);
+        }
+
+        window.onload = function() {
+            // Setup Event Listeners
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', handleTabClick);
+            });
+
+            document.getElementById('calculateBtn').addEventListener('click', calculateIntervals);
+            
+            // Stopwatch Event Listeners
+            document.getElementById('startStopBtn').addEventListener('click', startStopwatch);
+            document.getElementById('lapResetBtn').addEventListener('click', recordLap);
+
+            // AI Coach Event Listeners
+            document.getElementById('aiTipBtn').addEventListener('click', getAITip);
+            document.getElementById('aiAskBtn').addEventListener('click', askAICoach);
+            
+            // NEW TTS Event Listener
+            document.getElementById('aiSpeakBtn').addEventListener('click', () => speakAITip(latestTipText));
+
+            document.getElementById('aiQuery').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    askAICoach();
+                }
+            });
+
+
+            // Input validation for pace fields
+            document.getElementById('paceMinute').addEventListener('input', function(e) {
+                if (e.target.value.length > 2) e.target.value = e.target.value.slice(0, 2);
+            });
+            document.getElementById('paceSecond').addEventListener('input', function(e) {
+                if (e.target.value.length > 2) e.target.value = e.target.value.slice(0, 2);
+                if (e.target.value > 59) e.target.value = 59;
+            });
+
+            // State management using event delegation on the main container
+            document.getElementById('tab-containers').addEventListener('change', function(e) {
+                if (e.target.classList.contains('task-checkbox')) {
+                    saveState();
+                    updateProgress();
+                }
+            });
+
+            // Initialize App State: Calculate intervals based on default pace and update WORKOUT_DATA
+            calculateIntervals(); 
+            
+            // Initial render of the Warmup tab
+            switchTabContent('warmup');
+        };
+    </script>
+</body>
+</html>
