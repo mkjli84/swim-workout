@@ -5,9 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>대화형 수영 인터벌 훈련 + TTS 코치</title>
     <!-- 
-        [최종 CSP 수정]
-        가장 흔한 CSP 실패 지점인 'connect-src'를 최대한 개방적으로 설정하고,
-        'script-src'에 'unsafe-eval'을 추가하여 호스팅 환경의 제약을 완화합니다.
+        [CSP 안정화 버전]
+        CSP는 이제 네트워크 연결을 허용합니다. (이전 406 오류 해결)
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self'; 
@@ -186,7 +185,11 @@
         const TOTAL_DISTANCE = 2700;
         let completedDistance = 0;
         let currentTabKey = 'warmup'; // Keep track of the currently active tab
-        const API_KEY = ""; // Gemini API Key
+        
+        // 🚨 중요: 여기에 사용자의 실제 Gemini API 키를 큰따옴표 안에 넣어주세요!
+        // 예시: const API_KEY = "AIzaSy...your-key-here...L_Q";
+        const API_KEY = "AIzaSyDa_SBwJIg-J31chMejvJ-kCUnbibAEp7M"; // <--- INSERT YOUR GEMINI API KEY HERE!
+        
         const MODEL = 'gemini-2.5-flash-preview-09-2025';
         
         // NEW: Stores the latest generated tip text for TTS
@@ -321,6 +324,12 @@
         async function speakAITip(text) {
             if (!text || document.getElementById('aiSpeakBtn').disabled) return;
             
+            // API Key Check (Added for clarity, but fetch will fail anyway if missing)
+            if (!API_KEY) {
+                document.getElementById('aiTipText').innerHTML = `<span class="text-red-500">TTS Error: Please insert your Gemini API Key in the code.</span>`;
+                return;
+            }
+
             const aiSpeakBtn = document.getElementById('aiSpeakBtn');
             const ttsLoading = document.getElementById('ttsLoading');
             
@@ -408,6 +417,7 @@
                          // Attempt to read body for more specific error message
                         let errorText = await response.text();
                         if (errorText.length > 500) errorText = errorText.substring(0, 500) + "..."; // Truncate long error messages
+                        // Throw the error with the API status and message
                         throw new Error(`API returned status ${response.status}: ${errorText}`);
                     }
                     return await response.json();
@@ -423,6 +433,13 @@
          * 현재 탭 컨텍스트에 맞는 AI 팁을 생성합니다. (MODIFIED)
          */
         async function getAITip() {
+            // API Key Check (Added for clarity, but fetch will fail anyway if missing)
+            if (!API_KEY) {
+                document.getElementById('aiTipText').innerHTML = `<span class="text-red-500">⚠️ AI Coach Connection Error: Please insert your Gemini API Key in the code. (403 Error)</span>`;
+                document.getElementById('aiSpeakBtn').disabled = true;
+                return;
+            }
+
             const context = WORKOUT_CONTEXT[currentTabKey];
             const aiTipTextElement = document.getElementById('aiTipText');
             const aiTipBtn = document.getElementById('aiTipBtn');
@@ -461,7 +478,7 @@
 
             } catch (error) {
                 console.error("AI Tip Generation Error:", error);
-                aiTipTextElement.innerHTML = `<span class="text-red-500">⚠️ AI Coach Connection Error: ${error.message}. Please check your network or CSP settings.</span>`;
+                aiTipTextElement.innerHTML = `<span class="text-red-500">⚠️ AI Coach Connection Error: ${error.message}. Please insert your API Key.</span>`;
                 latestTipText = "";
             } finally {
                 aiTipBtn.disabled = false;
@@ -485,6 +502,14 @@
             const aiLoading = document.getElementById('aiLoading');
 
             if (!query) return;
+
+            // API Key Check
+            if (!API_KEY) {
+                aiAnswerText.textContent = `⚠️ AI 코치 연결 오류: Gemini API 키를 코드에 삽입해 주세요. (403 오류)`;
+                aiAnswerDiv.classList.remove('hidden');
+                return;
+            }
+
 
             aiAnswerDiv.classList.add('hidden');
             aiLoading.classList.remove('hidden');
